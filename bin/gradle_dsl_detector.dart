@@ -51,22 +51,18 @@ class GradleDslDetector {
 
   /// Detects the DSL used in a single Gradle file
   ///
-  /// Uses multiple signals:
-  /// 1. File extension (.gradle vs .gradle.kts)
-  /// 2. File content analysis (plugins block, function syntax, etc.)
+  /// Uses file extension as the primary and only reliable indicator:
+  /// - .gradle.kts → Kotlin DSL
+  /// - .gradle → Groovy DSL
+  ///
+  /// Note: The plugins {} block is NOT a reliable indicator of Kotlin DSL,
+  /// as it's also available in modern Groovy DSL projects.
   static GradleDsl detectFileDsl(File gradleFile) {
-    // First, check the file extension (most reliable)
-    final dslFromExtension = _detectFromExtension(gradleFile);
-    if (dslFromExtension != null) {
-      return dslFromExtension;
-    }
-
-    // If .gradle file, analyze content
-    try {
-      final content = gradleFile.readAsStringSync();
-      return _detectFromContent(content);
-    } catch (e) {
-      // If we can't read the file, default to Groovy
+    // File extension is the ONLY reliable way to determine DSL
+    if (gradleFile.path.endsWith('.gradle.kts')) {
+      return GradleDsl.kotlin;
+    } else {
+      // All .gradle files use Groovy DSL, regardless of their content
       return GradleDsl.groovy;
     }
   }
@@ -93,77 +89,4 @@ class GradleDslDetector {
     return null;
   }
 
-  /// Detects DSL from file extension
-  ///
-  /// Returns null if extension is ambiguous (e.g., .gradle file could be either)
-  static GradleDsl? _detectFromExtension(File file) {
-    if (file.path.endsWith('.gradle.kts')) {
-      return GradleDsl.kotlin;
-    }
-    // .gradle files can contain either DSL, need content analysis
-    return null;
-  }
-
-  /// Detects DSL from file content
-  ///
-  /// Uses heuristics to determine if a .gradle file uses Kotlin DSL syntax
-  static GradleDsl _detectFromContent(String content) {
-    // Check for Kotlin DSL indicators
-    if (_hasKotlinDslIndicators(content)) {
-      return GradleDsl.kotlin;
-    }
-
-    // Default to Groovy DSL
-    return GradleDsl.groovy;
-  }
-
-  /// Checks if content has Kotlin DSL indicators
-  static bool _hasKotlinDslIndicators(String content) {
-    // Check for plugins {} block (Kotlin DSL feature)
-    if (_hasPluginsBlock(content)) {
-      return true;
-    }
-
-    // Check for function call syntax: include(":module")
-    if (_hasFunctionCallSyntax(content)) {
-      return true;
-    }
-
-    // Check for Kotlin-specific map syntax: mapOf(...)
-    if (_hasKotlinMapSyntax(content)) {
-      return true;
-    }
-
-    return false;
-  }
-
-  /// Checks for plugins {} block
-  ///
-  /// The plugins {} block is a Kotlin DSL feature, though it can appear
-  /// in .gradle files when using modern Gradle versions
-  static bool _hasPluginsBlock(String content) {
-    // Look for "plugins {" pattern
-    final pluginsRegex = RegExp(r'plugins\s*\{');
-    return pluginsRegex.hasMatch(content);
-  }
-
-  /// Checks for function call syntax
-  ///
-  /// Kotlin DSL uses function calls: include(":app")
-  /// Groovy DSL uses: include ':app' or include ":app"
-  static bool _hasFunctionCallSyntax(String content) {
-    // Look for include(...) pattern (Kotlin style)
-    final functionCallRegex = RegExp(r'include\s*\(');
-    return functionCallRegex.hasMatch(content);
-  }
-
-  /// Checks for Kotlin map syntax
-  ///
-  /// Kotlin DSL uses: mapOf("key" to "value")
-  /// Groovy DSL uses: [key: "value"]
-  static bool _hasKotlinMapSyntax(String content) {
-    // Look for mapOf(...) pattern
-    final mapOfRegex = RegExp(r'mapOf\s*\(');
-    return mapOfRegex.hasMatch(content);
-  }
 }
