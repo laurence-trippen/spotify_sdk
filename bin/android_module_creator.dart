@@ -3,19 +3,22 @@ import 'dart:io';
 import 'package:logger/logger.dart';
 
 import 'android_setup.dart';
+import 'gradle_dsl_detector.dart';
+import 'gradle_file_handler.dart';
+import 'gradle_syntax_generator.dart';
 
 /// Responsible for creating a new android module in the /android directory
 /// of the flutter project.
 class AndroidModuleCreator {
   String moduleName;
   String aarFileName;
+  DslDetectionResult dslResult;
 
-  AndroidModuleCreator(this.moduleName, this.aarFileName);
-
-  String _gradleFileContent(String aarFileName) => '''
-configurations.maybeCreate("default")
-artifacts.add("default", file('$aarFileName'))
-''';
+  AndroidModuleCreator(
+    this.moduleName,
+    this.aarFileName,
+    this.dslResult,
+  );
 
   String _readmeContent(String moduleName, String aarFileName) => '''
 # Spotify Android SDK for Flutter
@@ -35,14 +38,19 @@ flutter pub run spotify_sdk:android_setup --cleanup
     final aarDir = await Directory('android/$moduleName').create();
     logger.t('created new directory ${aarDir.path}');
 
-    // create build.gradle file
+    // create build.gradle file (always use Groovy DSL for module for compatibility)
+    final moduleDsl = GradleDsl.groovy;
+    final gradleContent = GradleSyntaxGenerator.generateModuleBuildFile(
+      aarFileName,
+      moduleDsl,
+    );
     final gradleFile = await File('${aarDir.path}/build.gradle').create();
     logger.t('created new file ${gradleFile.path}');
-    await gradleFile.writeAsString(_gradleFileContent(aarFileName));
+    await gradleFile.writeAsString(gradleContent);
 
-    _settingsGradle(logger);
+    await _settingsGradle(logger);
 
-    _appBuildGradle(logger);
+    await _appBuildGradle(logger);
 
     // create README.md file
     final readmeFile = await File('${aarDir.path}/README.md').create();
@@ -50,47 +58,70 @@ flutter pub run spotify_sdk:android_setup --cleanup
     await readmeFile.writeAsString(_readmeContent(moduleName, aarFileName));
   }
 
-  void _settingsGradle(Logger logger) async {
+  Future<void> _settingsGradle(Logger logger) async {
     // edit settings.gradle file
-    final settingsFile = await File('android/settings.gradle').readAsString();
-    final includeStatement = "include ':$moduleName'";
-    if (settingsFile.contains(includeStatement)) {
-      logger.t('settings.gradle already contains $includeStatement');
-    } else {
-      final String newSettingsFile;
-      if (settingsFile.contains("include ':app'")) {
-        newSettingsFile = settingsFile.replaceFirst(
-            'include \':app\'', 'include \':app\'\ninclude \':$moduleName\'');
-      } else {
-        newSettingsFile = settingsFile.replaceFirst(
-            'include ":app"', 'include ":app"\ninclude ":$moduleName"');
-      }
-      await File('android/settings.gradle').writeAsString(newSettingsFile);
-      logger.t('added "$includeStatement" to android/settings.gradle');
+    final (settingsFile, settingsContent) = GradleFileHandler.readGradleFile(
+      'android',
+      'settings.gradle',
+    );
+
+    final dsl = dslResult.settingsGradleDsl;
+
+    if (GradleFileHandler.containsIncludeStatement(
+        settingsContent, moduleName, dsl)) {
+      logger.t('settings.gradle already contains include statement');
+      return;
     }
+
+    final newContent = GradleFileHandler.insertIncludeStatement(
+      settingsContent,
+      moduleName,
+      dsl,
+    );
+
+    await settingsFile.writeAsString(newContent);
+    logger.t('added include statement to settings.gradle');
   }
 
-  void _appBuildGradle(Logger logger) async {
+  Future<void> _appBuildGradle(Logger logger) async {
     // edit app/build.gradle file
-    final appBuildFile = await File('android/app/build.gradle').readAsString();
-    if (!appBuildFile.contains('defaultConfig')) {
+    final (appBuildFile, appBuildContent) = GradleFileHandler.readGradleFile(
+      'android/app',
+      'build.gradle',
+    );
+
+    final dsl = dslResult.appBuildGradleDsl;
+
+    if (!appBuildContent.contains('defaultConfig')) {
       logger.e(
           'Error: The file "android/app/build.gradle" does not contain a defaultConfig block. '
           'Your android project might be misconfigured.');
       return;
     }
-    if (appBuildFile.contains('manifestPlaceholders')) {
+
+    if (appBuildContent.contains('manifestPlaceholders')) {
       logger.w(
           'android/app/build.gradle already contains manifestPlaceholders. '
           'Make sure to update the redirect scheme and host name manually if necessary.');
       return;
     }
 
-    final String newAppBuildFile = appBuildFile.replaceFirst(
-        'defaultConfig {',
-        'defaultConfig {\n'
-            '       manifestPlaceholders = [redirectSchemeName: "spotify-sdk", redirectHostName: "auth"]');
-    await File('android/app/build.gradle').writeAsString(newAppBuildFile);
+    final placeholders = {
+      'redirectSchemeName': 'spotify-sdk',
+      'redirectHostName': 'auth',
+    };
+
+    final manifestLine = GradleSyntaxGenerator.generateManifestPlaceholders(
+      placeholders,
+      dsl,
+    );
+
+    final newAppBuildContent = appBuildContent.replaceFirst(
+      'defaultConfig {',
+      'defaultConfig {\n        $manifestLine',
+    );
+
+    await appBuildFile.writeAsString(newAppBuildContent);
     logger.t('added manifestPlaceholders to android/app/build.gradle');
   }
 }

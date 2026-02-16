@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'android_setup.dart';
+import 'gradle_file_handler.dart';
 
 /// Checks if all preconditions are met to execute the script.
 /// Returns true if all preconditions are met, false otherwise.
@@ -26,8 +27,8 @@ class PreconditionChecker {
       return false;
     }
 
-    // check if the necessary android files exist
-    if (!File('android/app/build.gradle').existsSync()) {
+    // check if the necessary android files exist (both .gradle and .gradle.kts)
+    if (!GradleFileHandler.gradleFileExists('android/app', 'build.gradle')) {
       logger.e('Error: The file "android/app/build.gradle" does not exist.');
       return false;
     }
@@ -35,10 +36,15 @@ class PreconditionChecker {
     // check if the setup may have already been executed and recommend to run the cleanup script
     bool prevRun = Directory('android/$moduleName').existsSync() ||
         File('android/$moduleName/build.gradle').existsSync();
-    if (!prevRun && File('android/settings.gradle').existsSync()) {
-      final settingsFile = File('android/settings.gradle').readAsStringSync();
-      prevRun |= settingsFile.contains("include ':$moduleName'");
-      prevRun |= settingsFile.contains('include ":$moduleName"');
+    if (!prevRun && GradleFileHandler.gradleFileExists('android', 'settings.gradle')) {
+      final (_, settingsContent) = GradleFileHandler.readGradleFile(
+        'android',
+        'settings.gradle',
+      );
+      // Check for both Groovy and Kotlin DSL include statements
+      prevRun |= settingsContent.contains("include ':$moduleName'");
+      prevRun |= settingsContent.contains('include ":$moduleName"');
+      prevRun |= settingsContent.contains('include(":$moduleName")');
     }
 
     if (prevRun) {
