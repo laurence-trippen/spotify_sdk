@@ -35,7 +35,7 @@ class PreconditionChecker {
 
     // check if the setup may have already been executed and recommend to run the cleanup script
     bool prevRun = Directory('android/$moduleName').existsSync() ||
-        File('android/$moduleName/build.gradle').existsSync();
+        GradleFileHandler.gradleFileExists('android/$moduleName', 'build.gradle');
     if (!prevRun && GradleFileHandler.gradleFileExists('android', 'settings.gradle')) {
       final (_, settingsContent) = GradleFileHandler.readGradleFile(
         'android',

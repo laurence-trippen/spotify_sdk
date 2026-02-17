@@ -38,13 +38,14 @@ flutter pub run spotify_sdk:android_setup --cleanup
     final aarDir = await Directory('android/$moduleName').create();
     logger.t('created new directory ${aarDir.path}');
 
-    // create build.gradle file (always use Groovy DSL for module for compatibility)
-    final moduleDsl = GradleDsl.groovy;
+    // create build.gradle / build.gradle.kts matching the project DSL
+    final moduleDsl = dslResult.settingsGradleDsl;
     final gradleContent = GradleSyntaxGenerator.generateModuleBuildFile(
       aarFileName,
       moduleDsl,
     );
-    final gradleFile = await File('${aarDir.path}/build.gradle').create();
+    final gradleFileName = 'build${GradleSyntaxGenerator.getFileExtension(moduleDsl)}';
+    final gradleFile = await File('${aarDir.path}/$gradleFileName').create();
     logger.t('created new file ${gradleFile.path}');
     await gradleFile.writeAsString(gradleContent);
 
