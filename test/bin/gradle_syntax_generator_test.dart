@@ -99,26 +99,36 @@ void main() {
       expect(result, contains('redirectHostName: "auth"'));
     });
 
-    test('Kotlin DSL generates mapOf() syntax', () {
+    test('Kotlin DSL uses putAll() to avoid val reassignment', () {
       final result = GradleSyntaxGenerator.generateManifestPlaceholders(
         placeholders,
         GradleDsl.kotlin,
       );
 
-      expect(result, startsWith('manifestPlaceholders = mapOf('));
+      expect(result, startsWith('manifestPlaceholders.putAll(mapOf('));
       expect(result, contains('"redirectSchemeName" to "spotify-sdk"'));
       expect(result, contains('"redirectHostName" to "auth"'));
     });
 
-    test('Groovy output does not contain mapOf', () {
+    test('Kotlin DSL does not use = assignment', () {
+      final result = GradleSyntaxGenerator.generateManifestPlaceholders(
+        placeholders,
+        GradleDsl.kotlin,
+      );
+      // Must NOT use = since manifestPlaceholders is a val in Kotlin DSL
+      expect(result, isNot(startsWith('manifestPlaceholders =')));
+    });
+
+    test('Groovy output does not contain mapOf or putAll', () {
       final result = GradleSyntaxGenerator.generateManifestPlaceholders(
         placeholders,
         GradleDsl.groovy,
       );
       expect(result, isNot(contains('mapOf')));
+      expect(result, isNot(contains('putAll')));
     });
 
-    test('Kotlin output does not use map literal syntax', () {
+    test('Kotlin output does not use Groovy map literal syntax', () {
       final result = GradleSyntaxGenerator.generateManifestPlaceholders(
         placeholders,
         GradleDsl.kotlin,

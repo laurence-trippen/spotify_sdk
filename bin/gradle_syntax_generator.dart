@@ -44,12 +44,19 @@ artifacts.add("default", $fileRef)
   /// Generates manifestPlaceholders line for build.gradle
   ///
   /// Groovy DSL: `manifestPlaceholders = [key: "value", ...]`
-  /// Kotlin DSL: `manifestPlaceholders = mapOf("key" to "value", ...)`
+  /// Kotlin DSL: `manifestPlaceholders.putAll(mapOf("key" to "value", ...))`
+  ///
+  /// Note: In Kotlin DSL, manifestPlaceholders is a pre-initialized
+  /// `MutableMap<String, Any>` (val), so it cannot be reassigned with =.
+  /// Instead, putAll() is used to populate it.
   static String generateManifestPlaceholders(
     Map<String, String> placeholders,
     GradleDsl dsl,
   ) {
     final mapContent = _formatMap(placeholders, dsl);
+    if (dsl == GradleDsl.kotlin) {
+      return 'manifestPlaceholders.putAll($mapContent)';
+    }
     return 'manifestPlaceholders = $mapContent';
   }
 
