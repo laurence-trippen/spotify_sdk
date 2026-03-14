@@ -4,6 +4,7 @@ import 'package:logger/logger.dart';
 
 import 'android_module_creator.dart';
 import 'github_api.dart';
+import 'gradle_dsl_detector.dart';
 import 'precondition_checker.dart';
 
 import 'android_cleanup.dart' as cleanup;
@@ -80,8 +81,21 @@ void _runSetup({String? sdkVersion}) async {
   client.close();
   logger.t('downloaded $name to ${destination.path}');
 
-  // create the new module
-  await AndroidModuleCreator(moduleName, name).createModuleDirectory();
+  // detect DSL before creating module
+  final dslResult = GradleDslDetector.detectProjectDsl('android');
+
+  if (dslResult.isMixedProject) {
+    logger.w('Detected mixed Groovy/Kotlin DSL project. '
+        'Will generate appropriate syntax for each file.');
+  } else {
+    final dslName = dslResult.settingsGradleDsl == GradleDsl.kotlin
+        ? 'Kotlin DSL'
+        : 'Groovy DSL';
+    logger.i('Detected $dslName project');
+  }
+
+  // create the new module with DSL awareness
+  await AndroidModuleCreator(moduleName, name, dslResult).createModuleDirectory();
 }
 
 /// Log filter to show all logs when running the script in release mode.
